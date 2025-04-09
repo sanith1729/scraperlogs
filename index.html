@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crawl Prompt Web Scraper</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .container {
+      margin-top: 50px;
+      max-width: 900px;
+    }
+    #scrape-message {
+      margin-top: 20px;
+    }
+    #scrape-results {
+      margin-top: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1rem;
+    }
+    th,
+    td {
+      padding: 8px;
+      border: 1px solid #ddd;
+    }
+    .pagination-controls {
+      margin-top: 20px;
+    }
+    /* Live log panel styling */
+    #live-logs {
+      margin-top: 20px;
+      background-color: #e9ecef;
+      padding: 10px;
+      max-height: 250px;
+      overflow-y: scroll;
+      font-family: monospace;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="mb-4">Crawl Prompt Web Scraper</h1>
+    <form id="scrapeForm">
+      <div class="mb-3">
+        <label for="scrape-url" class="form-label">Website URL</label>
+        <input
+          type="url"
+          class="form-control"
+          id="scrape-url"
+          placeholder="Enter website URL"
+          required
+        />
+      </div>
+      <div class="mb-3">
+        <label for="scrape-prompt" class="form-label">Prompt (What to extract?)</label>
+        <textarea
+          class="form-control"
+          id="scrape-prompt"
+          rows="3"
+          placeholder="E.g., What do you need from the webpage?"
+          required
+        ></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary">Scrape &amp; Show Results</button>
+    </form>
+
+    <div id="scrape-message"></div>
+
+    <!-- Container to display scraped results -->
+    <div id="scrape-results"></div>
+
+    <!-- Pagination controls -->
+    <div class="pagination-controls" id="pagination-controls" style="display:none;">
+      <button id="prevBtn" class="btn btn-secondary">Previous</button>
+      <span id="pageIndicator" class="mx-3"></span>
+      <button id="nextBtn" class="btn btn-secondary">Next</button>
+    </div>
+
+    <button id="downloadBtn" class="btn btn-success mt-3" style="display:none;">
+      Download CSV (Current Page)
+    </button>
+
+    <!-- Live Logs Panel -->
+    <h3 class="mt-5">Live Server Logs</h3>
+    <div id="live-logs"></div>
+  </div>
+
+  <script>
+    let chunkData = [];   // Each entry: array of objects for that chunk
+    let currentPage = 0;  // Index of the current chunk/page
+
+    document.getElementById("scrapeForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const url = document.getElementById("scrape-url").value;
+      const prompt = document.getElementById("scrape-prompt").value;
+      const messageDiv = document.getElementById("scrape-message");
+      const resultsDiv = document.getElementById("scrape-results");
+      const paginationDiv = document.getElementById("pagination-controls");
+      const downloadBtn = document.getElementById("downloadBtn");
+      const pageIndicator = document.getElementById("pageIndicator");
+
+      // Reset
+      messageDiv.innerHTML = "";
+      resultsDiv.innerHTML = "";
+      paginationDiv.style.display = "none";
+      downloadBtn.style.display = "none";
+      chunkData = [];
+      currentPage = 0;
+
+      // Show progress messages
+      const progressMessages = [
+        "Scraping website...",
+        "Finding relevant information...",
+        "Locating pagination...",
+        "Processing data..."
+      ];
+      const finalMessage = "Scraping in progress, this might take a minute for accurate information.";
+      let progressIndex = 0;
+      let progressTimeout;
+
+      function showNextMessage() {
+        if (progressIndex < progressMessages.length) {
+          messageDiv.innerHTML = `<div class="alert alert-info">${progressMessages[progressIndex]}</div>`;
+          progressIndex++;
+          progressTimeout = setTimeout(showNextMessage, 5000);
+        } else {
+          messageDiv.innerHTML = `<div class="alert alert-info">${finalMessage}</div>`;
+        }
+      }
+      showNextMessage();
+
+      try {
+        // Send POST request with URL and prompt, plus the access code header.
+        const response = await fetch("https://scraper.storieswhiletravelling.com/scrape", {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "X-Access-Code": "FSaX54SB@1729"
+          },
+          body: JSON.stringify({ url, prompt })
+        });
+
+        // Stop progress messages
+        clearTimeout(progressTimeout);
+        messageDiv.innerHTML = '<div class="alert alert-info">Processing results...</div>';
+
+        if (!response.ok) {
+          throw new Error("Server error: " + response.statusText);
+        }
+
+        const data = await response.json();
+        if (data.results && data.results.length > 0) {
+          messageDiv.innerHTML = '<div class="alert alert-success">Results loaded successfully!</div>';
+
+          // Parse each chunk & convert to an array-of-objects
+          data.results.forEach((chunkStr) => {
+            // Clean up potential ``` fences
+            chunkStr = chunkStr.replace(/```json\s*/i, "").replace(/```/g, "").trim();
+            let parsed;
+            try {
+              parsed = JSON.parse(chunkStr);
+            } catch (err) {
+              // Fallback: store as raw string if JSON fails
+              parsed = { raw: chunkStr };
+            }
+            const arr = findMainArray(parsed);
+            chunkData.push(arr);
+          });
+
+          // Show first chunk
+          showChunk(0);
+          paginationDiv.style.display = chunkData.length > 1 ? "block" : "none";
+          downloadBtn.style.display = "block";
+          pageIndicator.textContent = `Page 1 of ${chunkData.length}`;
+        } else {
+          messageDiv.innerHTML = '<div class="alert alert-warning">No relevant data found.</div>';
+        }
+      } catch (error) {
+        clearTimeout(progressTimeout);
+        messageDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        console.error("Error:", error);
+      }
+    });
+
+    // Prev/Next button handlers
+    document.getElementById("prevBtn").addEventListener("click", function () {
+      if (currentPage > 0) {
+        showChunk(currentPage - 1);
+      }
+    });
+    document.getElementById("nextBtn").addEventListener("click", function () {
+      if (currentPage < chunkData.length - 1) {
+        showChunk(currentPage + 1);
+      }
+    });
+
+    // Download CSV for current chunk
+    document.getElementById("downloadBtn").addEventListener("click", function () {
+      if (chunkData.length === 0) return;
+      const arr = chunkData[currentPage];
+      const csvContent = buildCsv(arr);
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `scraped_data_page_${currentPage + 1}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+
+    /**
+     * Displays a specific chunk (pageIndex) in a table.
+     */
+    function showChunk(pageIndex) {
+      currentPage = pageIndex;
+      const resultsDiv = document.getElementById("scrape-results");
+      const pageIndicator = document.getElementById("pageIndicator");
+      resultsDiv.innerHTML = "";
+
+      const arr = chunkData[pageIndex];
+      if (!arr || arr.length === 0) {
+        resultsDiv.innerHTML = "<div class='alert alert-warning'>No data for this chunk.</div>";
+      } else {
+        resultsDiv.innerHTML = buildTableHtml(arr);
+      }
+
+      pageIndicator.textContent = `Page ${pageIndex + 1} of ${chunkData.length}`;
+    }
+
+    /**
+     * Attempt to find the "main array of objects" in the parsed data.
+     */
+    function findMainArray(data) {
+      if (Array.isArray(data) && data.every(isPlainObject)) {
+        return data;
+      }
+      if (isPlainObject(data)) {
+        const keys = Object.keys(data);
+        if (keys.length === 1 && Array.isArray(data[keys[0]])) {
+          const arr = data[keys[0]];
+          if (arr.every(isPlainObject)) {
+            return arr;
+          }
+        }
+      }
+      return [typeof data === "object" ? data : { value: String(data) }];
+    }
+
+    function isPlainObject(item) {
+      return (
+        item &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        Object.prototype.toString.call(item) === "[object Object]"
+      );
+    }
+
+    /**
+     * Build an HTML table from an array of objects with arbitrary keys.
+     */
+    function buildTableHtml(dataArray) {
+      if (!dataArray || dataArray.length === 0) {
+        return "<div class='alert alert-warning'>No data to display.</div>";
+      }
+      const allKeys = new Set();
+      dataArray.forEach(obj => {
+        Object.keys(obj).forEach(k => allKeys.add(k));
+      });
+      const keys = Array.from(allKeys);
+
+      let html = "<table class='table table-striped'><thead><tr>";
+      keys.forEach(key => {
+        html += `<th>${key}</th>`;
+      });
+      html += "</tr></thead><tbody>";
+
+      dataArray.forEach(obj => {
+        const rowCounts = keys.map(key => {
+          const val = obj[key];
+          return Array.isArray(val) ? val.length : 1;
+        });
+        const maxRows = Math.max(...rowCounts);
+
+        for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
+          html += "<tr>";
+          keys.forEach(key => {
+            let val = obj[key] !== undefined ? obj[key] : "";
+            if (Array.isArray(val)) {
+              val = rowIndex < val.length ? val[rowIndex] : "";
+            } else if (typeof val === "object") {
+              val = JSON.stringify(val, null, 2);
+            }
+            if (!Array.isArray(obj[key])) {
+              if (rowIndex === 0) {
+                html += `<td rowspan="${maxRows}">${val}</td>`;
+              }
+            } else {
+              html += `<td>${val}</td>`;
+            }
+          });
+          html += "</tr>";
+        }
+      });
+
+      html += "</tbody></table>";
+      return html;
+    }
+
+    /**
+     * Build CSV from an array of objects.
+     */
+    function buildCsv(dataArray) {
+      if (!dataArray || dataArray.length === 0) return "";
+      const allKeys = new Set();
+      dataArray.forEach(obj => {
+        Object.keys(obj).forEach(k => allKeys.add(k));
+      });
+      const keys = Array.from(allKeys);
+
+      let csv = keys.join(",") + "\n";
+      dataArray.forEach(obj => {
+        const row = keys.map(key => {
+          let val = obj[key] !== undefined ? obj[key] : "";
+          if (typeof val === "object") {
+            val = JSON.stringify(val);
+          }
+          val = String(val).replace(/"/g, '""');
+          return `"${val}"`;
+        }).join(",");
+        csv += row + "\n";
+      });
+      return csv;
+    }
+
+    // -------------------- Live Log Streaming via SSE --------------------
+    const logSource = new EventSource("https://scraper.storieswhiletravelling.com/logs");
+    logSource.onmessage = function(event) {
+      const liveLogsDiv = document.getElementById("live-logs");
+      const newLog = document.createElement("div");
+      newLog.textContent = event.data;
+      liveLogsDiv.appendChild(newLog);
+      // Keep the log panel scrolled to the bottom
+      liveLogsDiv.scrollTop = liveLogsDiv.scrollHeight;
+    };
+    logSource.onerror = function(event) {
+      console.error("Log streaming error:", event);
+    };
+  </script>
+</body>
+</html>

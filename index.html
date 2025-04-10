@@ -35,16 +35,6 @@
     .pagination-controls {
       margin-top: 20px;
     }
-    /* Live log panel styling */
-    #live-logs {
-      margin-top: 20px;
-      background-color: #e9ecef;
-      padding: 10px;
-      max-height: 250px;
-      overflow-y: scroll;
-      font-family: monospace;
-      font-size: 0.9em;
-    }
   </style>
 </head>
 <body>
@@ -76,7 +66,7 @@
 
     <div id="scrape-message"></div>
 
-    <!-- Container to display scraped results -->
+    <!-- This container will show the table for the current chunk -->
     <div id="scrape-results"></div>
 
     <!-- Pagination controls -->
@@ -89,15 +79,11 @@
     <button id="downloadBtn" class="btn btn-success mt-3" style="display:none;">
       Download CSV (Current Page)
     </button>
-
-    <!-- Live Logs Panel -->
-    <h3 class="mt-5">Live Server Logs</h3>
-    <div id="live-logs"></div>
   </div>
 
   <script>
-    let chunkData = []; // Holds table data for each chunk
-    let currentPage = 0;
+    let chunkData = [];   // Each entry is an array of objects (table data for a chunk)
+    let currentPage = 0;  // Index of the current chunk/page
 
     document.getElementById("scrapeForm").addEventListener("submit", async function (e) {
       e.preventDefault();
@@ -109,7 +95,7 @@
       const downloadBtn = document.getElementById("downloadBtn");
       const pageIndicator = document.getElementById("pageIndicator");
 
-      // Reset UI elements
+      // Reset UI
       messageDiv.innerHTML = "";
       resultsDiv.innerHTML = "";
       paginationDiv.style.display = "none";
@@ -117,13 +103,14 @@
       chunkData = [];
       currentPage = 0;
 
+      // Show progress messages (one every 5 seconds)
       const progressMessages = [
         "Scraping website...",
         "Finding relevant information...",
         "Locating pagination...",
         "Processing data..."
       ];
-      const finalMessage = "Scraping in progress, this might take a minute for accurate information.";
+      const finalMessage = "Scraping in progress, it might take a minute for accurate Information";
       let progressIndex = 0;
       let progressTimeout;
 
@@ -139,11 +126,10 @@
       showNextMessage();
 
       try {
+        // Send the POST request (front-end sends only URL and prompt)
         const response = await fetch("https://scraper.storieswhiletravelling.com/scrape", {
           method: "POST",
-          headers: { 
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url, prompt })
         });
 
@@ -155,11 +141,12 @@
         }
 
         const data = await response.json();
-
         if (data.results && data.results.length > 0) {
           messageDiv.innerHTML = '<div class="alert alert-success">Results loaded successfully!</div>';
 
+          // For each chunk received, clean it up and parse into an array of objects
           data.results.forEach((chunkStr) => {
+            // Remove potential markdown fences (```json ... ```)
             chunkStr = chunkStr.replace(/```json\s*/i, "").replace(/```/g, "").trim();
             let parsed;
             try {
@@ -171,6 +158,7 @@
             chunkData.push(arr);
           });
 
+          // Display the first chunk
           showChunk(0);
           paginationDiv.style.display = chunkData.length > 1 ? "block" : "none";
           downloadBtn.style.display = "block";
@@ -185,6 +173,7 @@
       }
     });
 
+    // Pagination: handle Previous and Next buttons
     document.getElementById("prevBtn").addEventListener("click", function () {
       if (currentPage > 0) {
         showChunk(currentPage - 1);
@@ -195,6 +184,8 @@
         showChunk(currentPage + 1);
       }
     });
+
+    // CSV Download for current page
     document.getElementById("downloadBtn").addEventListener("click", function () {
       if (chunkData.length === 0) return;
       const arr = chunkData[currentPage];
@@ -209,6 +200,7 @@
       document.body.removeChild(a);
     });
 
+    // Display chunk number pageIndex as table
     function showChunk(pageIndex) {
       currentPage = pageIndex;
       const resultsDiv = document.getElementById("scrape-results");
@@ -224,6 +216,10 @@
       pageIndicator.textContent = `Page ${pageIndex + 1} of ${chunkData.length}`;
     }
 
+    // Attempt to extract the "main" array of objects from the parsed data.
+    // 1) If data is an array of objects, return it.
+    // 2) If data is an object with one key which is an array of objects, return that array.
+    // 3) Otherwise, wrap the entire data in an array.
     function findMainArray(data) {
       if (Array.isArray(data) && data.every(isPlainObject)) {
         return data;
@@ -240,19 +236,19 @@
       return [typeof data === "object" ? data : { value: String(data) }];
     }
 
+    // Check if an item is a plain object.
     function isPlainObject(item) {
-      return (
-        item &&
-        typeof item === "object" &&
-        !Array.isArray(item) &&
-        Object.prototype.toString.call(item) === "[object Object]"
-      );
+      return item && typeof item === "object" && !Array.isArray(item) &&
+        Object.prototype.toString.call(item) === "[object Object]";
     }
 
+    // Build an HTML table from an array of objects.
+    // For non-array object fields, the cell spans multiple rows.
     function buildTableHtml(dataArray) {
       if (!dataArray || dataArray.length === 0) {
         return "<div class='alert alert-warning'>No data to display.</div>";
       }
+      // Gather all keys from each object.
       const allKeys = new Set();
       dataArray.forEach(obj => {
         Object.keys(obj).forEach(k => allKeys.add(k));
@@ -266,21 +262,26 @@
       html += "</tr></thead><tbody>";
 
       dataArray.forEach(obj => {
+        // Determine the maximum number of rows required for this object (if some fields are arrays)
         const rowCounts = keys.map(key => {
           const val = obj[key];
           return Array.isArray(val) ? val.length : 1;
         });
         const maxRows = Math.max(...rowCounts);
 
+        // Build rows for this object
         for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
           html += "<tr>";
           keys.forEach(key => {
             let val = obj[key] !== undefined ? obj[key] : "";
             if (Array.isArray(val)) {
+              // For array values, pick the item for the current row
               val = rowIndex < val.length ? val[rowIndex] : "";
             } else if (typeof val === "object") {
               val = JSON.stringify(val, null, 2);
             }
+
+            // If the field is not an array, display it only once with rowspan
             if (!Array.isArray(obj[key])) {
               if (rowIndex === 0) {
                 html += `<td rowspan="${maxRows}">${val}</td>`;
@@ -292,10 +293,12 @@
           html += "</tr>";
         }
       });
+
       html += "</tbody></table>";
       return html;
     }
 
+    // Build CSV content from an array of objects.
     function buildCsv(dataArray) {
       if (!dataArray || dataArray.length === 0) return "";
       const allKeys = new Set();
@@ -318,19 +321,6 @@
       });
       return csv;
     }
-
-    // -------------------- Live Log Streaming via SSE --------------------
-    const logSource = new EventSource("https://scraper.storieswhiletravelling.com/logs");
-    logSource.onmessage = function(event) {
-      const liveLogsDiv = document.getElementById("live-logs");
-      const newLog = document.createElement("div");
-      newLog.textContent = event.data;
-      liveLogsDiv.appendChild(newLog);
-      liveLogsDiv.scrollTop = liveLogsDiv.scrollHeight;
-    };
-    logSource.onerror = function(event) {
-      console.error("Log streaming error:", event);
-    };
   </script>
 </body>
 </html>

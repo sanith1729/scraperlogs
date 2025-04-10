@@ -82,10 +82,10 @@
   </div>
 
   <script>
-    let chunkData = [];   // Each entry: array of objects for that chunk
+    let chunkData = [];   // Each entry: an array of objects for that chunk
     let currentPage = 0;  // Index of the current chunk/page
 
-    // Function to robustly extract the JSON portion from the text.
+    // Function to robustly extract the JSON portion from a text string.
     function extractJSON(text) {
       let startIndex = text.indexOf('{');
       let bracket = '{';
@@ -94,7 +94,7 @@
         bracket = '[';
       }
       if (startIndex === -1) return "";
-      const closingBracket = (bracket === '{') ? '}' : ']';
+      const closingBracket = bracket === '{' ? '}' : ']';
       let count = 0;
       let endIndex = startIndex;
       for (let i = startIndex; i < text.length; i++) {
@@ -111,6 +111,7 @@
       return text.substring(startIndex, endIndex + 1);
     }
 
+    // Event listener for form submission.
     document.getElementById("scrapeForm").addEventListener("submit", async function (e) {
       e.preventDefault();
       const url = document.getElementById("scrape-url").value;
@@ -137,6 +138,7 @@
         }
         const data = await response.json();
         messageDiv.innerHTML = '<div class="alert alert-success">Results loaded successfully!</div>';
+
         if (data.results && data.results.length > 0) {
           // Process each chunk and convert to an array-of-objects.
           data.results.forEach((chunkStr) => {
@@ -173,7 +175,6 @@
       }
     });
 
-    // Download CSV for the current chunk.
     document.getElementById("downloadBtn").addEventListener("click", function () {
       if (chunkData.length === 0) return;
       const arr = chunkData[currentPage];
@@ -188,6 +189,7 @@
       document.body.removeChild(a);
     });
 
+    // Function to display a specific chunk (page) in a table.
     function showChunk(pageIndex) {
       currentPage = pageIndex;
       const resultsDiv = document.getElementById("scrape-results");
@@ -202,6 +204,7 @@
       pageIndicator.textContent = `Page ${pageIndex + 1} of ${chunkData.length}`;
     }
 
+    // Function to identify the main array of objects in the parsed data.
     function findMainArray(data) {
       if (Array.isArray(data) && data.every(isPlainObject)) {
         return data;
@@ -218,11 +221,13 @@
       return [typeof data === "object" ? data : { value: String(data) }];
     }
 
+    // Function to check if the item is a plain object.
     function isPlainObject(item) {
       return item && typeof item === "object" && !Array.isArray(item) &&
              Object.prototype.toString.call(item) === "[object Object]";
     }
 
+    // Function to build an HTML table from an array of objects.
     function buildTableHtml(dataArray) {
       if (!dataArray || dataArray.length === 0) {
         return "<div class='alert alert-warning'>No data to display.</div>";
@@ -265,6 +270,7 @@
       return html;
     }
 
+    // Function to build CSV content from an array of objects.
     function buildCsv(dataArray) {
       if (!dataArray || dataArray.length === 0) return "";
       const allKeys = new Set();

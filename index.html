@@ -4,10 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Crawl Prompt Web Scraper</title>
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
     body {
       background-color: #f8f9fa;
@@ -54,23 +51,11 @@
     <form id="scrapeForm">
       <div class="mb-3">
         <label for="scrape-url" class="form-label">Website URL</label>
-        <input
-          type="url"
-          class="form-control"
-          id="scrape-url"
-          placeholder="Enter website URL"
-          required
-        />
+        <input type="url" class="form-control" id="scrape-url" placeholder="Enter website URL" required />
       </div>
       <div class="mb-3">
         <label for="scrape-prompt" class="form-label">Prompt (What to extract?)</label>
-        <textarea
-          class="form-control"
-          id="scrape-prompt"
-          rows="3"
-          placeholder="e.g., what do you need from the webpage?"
-          required
-        ></textarea>
+        <textarea class="form-control" id="scrape-prompt" rows="3" placeholder="e.g., what do you need from the webpage?" required></textarea>
       </div>
       <button type="submit" class="btn btn-primary">Scrape &amp; Show Results</button>
     </form>
@@ -101,7 +86,7 @@
     let chunkData = [];   // Each entry: array of objects for that chunk
     let currentPage = 0;  // Index of the current chunk/page
 
-    // Generate a unique pipeline ID for this session.
+    // Generate a unique pipeline ID using the browser's crypto API
     const pipelineId = crypto.randomUUID();
     console.log("Generated pipeline ID:", pipelineId);
 
@@ -114,7 +99,7 @@
       logContainer.scrollTop = logContainer.scrollHeight;
     }
 
-    // Connect to the SSE endpoint for live logs for this pipeline.
+    // Connect to the SSE logs endpoint for this pipeline.
     function connectSSE() {
       const eventSource = new EventSource("https://scraper.storieswhiletravelling.com/logs?pipeline_id=" + pipelineId);
       eventSource.onmessage = function(event) {
@@ -127,7 +112,7 @@
     }
     connectSSE();
 
-    // Function to robustly extract the JSON portion from the text
+    // Function to robustly extract the JSON portion from the text.
     function extractJSON(text) {
       let startIndex = text.indexOf('{');
       let bracket = '{';
@@ -135,9 +120,7 @@
         startIndex = text.indexOf('[');
         bracket = '[';
       }
-      if (startIndex === -1) {
-        return "";
-      }
+      if (startIndex === -1) return "";
       const closingBracket = (bracket === '{') ? '}' : ']';
       let count = 0;
       let endIndex = startIndex;
@@ -202,19 +185,14 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url, prompt, pipeline_id: pipelineId })
         });
-
         clearTimeout(progressTimeout);
         messageDiv.innerHTML = '<div class="alert alert-info">Processing results...</div>';
-
         if (!response.ok) {
           throw new Error("Server error: " + response.statusText);
         }
-
         const data = await response.json();
         if (data.results && data.results.length > 0) {
           messageDiv.innerHTML = '<div class="alert alert-success">Results loaded successfully!</div>';
-
-          // Process each chunk to an array-of-objects.
           data.results.forEach((chunkStr) => {
             chunkStr = extractJSON(chunkStr).trim();
             let parsed;
@@ -226,7 +204,6 @@
             const arr = findMainArray(parsed);
             chunkData.push(arr);
           });
-
           showChunk(0);
           paginationDiv.style.display = chunkData.length > 1 ? "block" : "none";
           downloadBtn.style.display = "block";
@@ -253,7 +230,6 @@
       }
     });
 
-    // Download CSV for the current chunk
     document.getElementById("downloadBtn").addEventListener("click", function () {
       if (chunkData.length === 0) return;
       const arr = chunkData[currentPage];
@@ -268,28 +244,20 @@
       document.body.removeChild(a);
     });
 
-    /**
-     * Displays a specific chunk (pageIndex) in a table.
-     */
     function showChunk(pageIndex) {
       currentPage = pageIndex;
       const resultsDiv = document.getElementById("scrape-results");
       const pageIndicator = document.getElementById("pageIndicator");
       resultsDiv.innerHTML = "";
-
       const arr = chunkData[pageIndex];
       if (!arr || arr.length === 0) {
         resultsDiv.innerHTML = "<div class='alert alert-warning'>No data for this chunk.</div>";
       } else {
         resultsDiv.innerHTML = buildTableHtml(arr);
       }
-
       pageIndicator.textContent = `Page ${pageIndex + 1} of ${chunkData.length}`;
     }
 
-    /**
-     * Attempts to find the "main array of objects" in the parsed data.
-     */
     function findMainArray(data) {
       if (Array.isArray(data) && data.every(isPlainObject)) {
         return data;
@@ -307,41 +275,28 @@
     }
 
     function isPlainObject(item) {
-      return (
-        item &&
-        typeof item === "object" &&
-        !Array.isArray(item) &&
-        Object.prototype.toString.call(item) === "[object Object]"
-      );
+      return item && typeof item === "object" && !Array.isArray(item) &&
+             Object.prototype.toString.call(item) === "[object Object]";
     }
 
-    /**
-     * Build an HTML table from an array of objects with arbitrary keys.
-     */
     function buildTableHtml(dataArray) {
       if (!dataArray || dataArray.length === 0) {
         return "<div class='alert alert-warning'>No data to display.</div>";
       }
-
       const allKeys = new Set();
       dataArray.forEach(obj => {
         Object.keys(obj).forEach(k => allKeys.add(k));
       });
       const keys = Array.from(allKeys);
-
       let html = "<table class='table table-striped'><thead><tr>";
-      keys.forEach(key => {
-        html += `<th>${key}</th>`;
-      });
+      keys.forEach(key => { html += `<th>${key}</th>`; });
       html += "</tr></thead><tbody>";
-
       dataArray.forEach(obj => {
         const rowCounts = keys.map(key => {
           const val = obj[key];
           return Array.isArray(val) ? val.length : 1;
         });
         const maxRows = Math.max(...rowCounts);
-
         for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
           html += "<tr>";
           keys.forEach(key => {
@@ -362,14 +317,10 @@
           html += "</tr>";
         }
       });
-
       html += "</tbody></table>";
       return html;
     }
 
-    /**
-     * Build CSV content from an array of objects.
-     */
     function buildCsv(dataArray) {
       if (!dataArray || dataArray.length === 0) return "";
       const allKeys = new Set();
@@ -377,7 +328,6 @@
         Object.keys(obj).forEach(k => allKeys.add(k));
       });
       const keys = Array.from(allKeys);
-
       let csv = keys.join(",") + "\n";
       dataArray.forEach(obj => {
         const row = keys.map(key => {
@@ -395,4 +345,3 @@
   </script>
 </body>
 </html>
-

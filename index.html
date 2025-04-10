@@ -68,17 +68,23 @@
   </div>
 
   <script>
-    let chunkData = [];   // Array to hold each result chunk (array of objects)
-    let currentPage = 0;  // Index for pagination
+    let chunkData = [];   // Array of object arrays representing each result chunk.
+    let currentPage = 0;  // Current page index.
 
-    // Progress messages for the processing steps.
+    // Define an array of 10 progress messages.
     const progressMessages = [
       "Scraping website...",
-      "Finding relevant information...",
-      "Locating pagination...",
-      "Processing data..."
+      "Analyzing DOM structure...",
+      "Identifying relevant sections...",
+      "Detecting pagination links...",
+      "Extracting text content...",
+      "Interrogating data patterns...",
+      "Processing data chunks...",
+      "Cross-referencing information...",
+      "Assembling final results...",
+      "Finalizing output..."
     ];
-    const finalMessage = "Finalizing results; please wait...";
+    const finalMessage = "Results are almost ready...";
     let progressIndex = 0;
     let progressTimeout;
 
@@ -148,7 +154,6 @@
       }
     });
 
-    // Function to extract JSON content from a string.
     function extractJSON(text) {
       let startIndex = text.indexOf('{');
       let bracket = '{';
@@ -174,7 +179,7 @@
       return text.substring(startIndex, endIndex + 1);
     }
 
-    // Pagination control event listeners.
+    // Pagination controls.
     document.getElementById("prevBtn").addEventListener("click", function () {
       if (currentPage > 0) {
         showChunk(currentPage - 1);
@@ -200,7 +205,6 @@
       document.body.removeChild(a);
     });
 
-    // Displays the results for the given page index.
     function showChunk(pageIndex) {
       currentPage = pageIndex;
       const resultsDiv = document.getElementById("scrape-results");
@@ -215,7 +219,6 @@
       pageIndicator.textContent = `Page ${pageIndex + 1} of ${chunkData.length}`;
     }
 
-    // Finds the main array in the parsed data.
     function findMainArray(data) {
       if (Array.isArray(data) && data.every(isPlainObject)) {
         return data;
@@ -237,11 +240,70 @@
              Object.prototype.toString.call(item) === "[object Object]";
     }
 
-    // Builds an HTML table from an array of objects.
     function buildTableHtml(dataArray) {
       if (!dataArray || dataArray.length === 0) {
         return "<div class='alert alert-warning'>No data to display.</div>";
       }
       const allKeys = new Set();
       dataArray.forEach(obj => {
-        Object.keys(obj
+        Object.keys(obj).forEach(k => allKeys.add(k));
+      });
+      const keys = Array.from(allKeys);
+      let html = "<table class='table table-striped'><thead><tr>";
+      keys.forEach(key => { html += `<th>${key}</th>`; });
+      html += "</tr></thead><tbody>";
+      dataArray.forEach(obj => {
+        const rowCounts = keys.map(key => {
+          const val = obj[key];
+          return Array.isArray(val) ? val.length : 1;
+        });
+        const maxRows = Math.max(...rowCounts);
+        for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
+          html += "<tr>";
+          keys.forEach(key => {
+            let val = obj[key] !== undefined ? obj[key] : "";
+            if (Array.isArray(val)) {
+              val = rowIndex < val.length ? val[rowIndex] : "";
+            } else if (typeof val === "object") {
+              val = JSON.stringify(val, null, 2);
+            }
+            if (!Array.isArray(obj[key])) {
+              if (rowIndex === 0) {
+                html += `<td rowspan="${maxRows}">${val}</td>`;
+              }
+            } else {
+              html += `<td>${val}</td>`;
+            }
+          });
+          html += "</tr>";
+        }
+      });
+      html += "</tbody></table>";
+      return html;
+    }
+
+    function buildCsv(dataArray) {
+      if (!dataArray || dataArray.length === 0) return "";
+      const allKeys = new Set();
+      dataArray.forEach(obj => {
+        Object.keys(obj).forEach(k => allKeys.add(k));
+      });
+      const keys = Array.from(allKeys);
+      let csv = keys.join(",") + "\n";
+      dataArray.forEach(obj => {
+        const row = keys.map(key => {
+          let val = obj[key] !== undefined ? obj[key] : "";
+          if (typeof val === "object") {
+            val = JSON.stringify(val);
+          }
+          val = String(val).replace(/"/g, '""');
+          return `"${val}"`;
+        }).join(",");
+        csv += row + "\n";
+      });
+      return csv;
+    }
+  </script>
+</body>
+</html>
+

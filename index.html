@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Crawl Prompt </title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <title>Crawl Prompt Web Scraper</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
   <style>
     body {
       background-color: #f8f9fa;
@@ -47,15 +50,27 @@
 </head>
 <body>
   <div class="container">
-    <h1 class="mb-4">Web Scraper</h1>
+    <h1 class="mb-4">Crawl Prompt Web Scraper</h1>
     <form id="scrapeForm">
       <div class="mb-3">
         <label for="scrape-url" class="form-label">Website URL</label>
-        <input type="url" class="form-control" id="scrape-url" placeholder="Enter website URL" required />
+        <input
+          type="url"
+          class="form-control"
+          id="scrape-url"
+          placeholder="Enter website URL"
+          required
+        />
       </div>
       <div class="mb-3">
         <label for="scrape-prompt" class="form-label">Prompt (What to extract?)</label>
-        <textarea class="form-control" id="scrape-prompt" rows="3" placeholder="e.g., what do you need from the webpage?" required></textarea>
+        <textarea
+          class="form-control"
+          id="scrape-prompt"
+          rows="3"
+          placeholder="e.g., what do you need from the webpage?"
+          required
+        ></textarea>
       </div>
       <button type="submit" class="btn btn-primary">Scrape &amp; Show Results</button>
     </form>
@@ -66,13 +81,13 @@
     <div id="scrape-results"></div>
 
     <!-- Pagination controls -->
-    <div class="pagination-controls" id="pagination-controls" style="display:none;">
+    <div class="pagination-controls" id="pagination-controls">
       <button id="prevBtn" class="btn btn-secondary">Previous</button>
       <span id="pageIndicator" class="mx-3"></span>
       <button id="nextBtn" class="btn btn-secondary">Next</button>
     </div>
 
-    <button id="downloadBtn" class="btn btn-success mt-3" style="display:none;">
+    <button id="downloadBtn" class="btn btn-success mt-3">
       Download CSV (Current Page)
     </button>
 
@@ -86,11 +101,12 @@
     let chunkData = [];   // Each entry: array of objects for that chunk
     let currentPage = 0;  // Index of the current chunk/page
 
-    // Generate a unique pipeline ID using the browser's crypto API
+    // Generate a unique pipeline ID using the browser's crypto API.
+    // (This ID uniquely identifies the scraping session.)
     const pipelineId = crypto.randomUUID();
     console.log("Generated pipeline ID:", pipelineId);
 
-    // Function to append log messages to the live log container.
+    // Append log messages to the live log container.
     function appendLog(message) {
       const logContainer = document.getElementById("log-container");
       const logEntry = document.createElement("div");
@@ -112,7 +128,7 @@
     }
     connectSSE();
 
-    // Function to robustly extract the JSON portion from the text.
+    // Function to robustly extract the JSON portion from text.
     function extractJSON(text) {
       let startIndex = text.indexOf('{');
       let bracket = '{';
@@ -144,55 +160,27 @@
       const prompt = document.getElementById("scrape-prompt").value;
       const messageDiv = document.getElementById("scrape-message");
       const resultsDiv = document.getElementById("scrape-results");
-      const paginationDiv = document.getElementById("pagination-controls");
-      const downloadBtn = document.getElementById("downloadBtn");
       const pageIndicator = document.getElementById("pageIndicator");
 
-      // Reset UI elements and state
+      // Reset UI elements and state.
       messageDiv.innerHTML = "";
       resultsDiv.innerHTML = "";
-      paginationDiv.style.display = "none";
-      downloadBtn.style.display = "none";
       chunkData = [];
       currentPage = 0;
 
-      // Define progress messages for feedback.
-      const progressMessages = [
-        "Scraping website...",
-        "Finding relevant information...",
-        "Locating pagination...",
-        "Processing data..."
-      ];
-      const finalMessage = "Scraping in progress, it might take a minute for accurate Information";
-      let progressIndex = 0;
-      let progressTimeout;
-
-      function showNextMessage() {
-        if (progressIndex < progressMessages.length) {
-          messageDiv.innerHTML = `<div class="alert alert-info">${progressMessages[progressIndex]}</div>`;
-          progressIndex++;
-          progressTimeout = setTimeout(showNextMessage, 5000);
-        } else {
-          messageDiv.innerHTML = `<div class="alert alert-info">${finalMessage}</div>`;
-        }
-      }
-      showNextMessage();
-
+      // Send the scraping request with URL, prompt, and pipeline ID.
       try {
-        // Send the POST request including the pipeline ID.
         const response = await fetch("https://scraper.storieswhiletravelling.com/scrape", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url, prompt, pipeline_id: pipelineId })
         });
-        clearTimeout(progressTimeout);
-        messageDiv.innerHTML = '<div class="alert alert-info">Processing results...</div>';
         if (!response.ok) {
           throw new Error("Server error: " + response.statusText);
         }
         const data = await response.json();
+        messageDiv.innerHTML = '<div class="alert alert-success">Results loaded successfully!</div>';
         if (data.results && data.results.length > 0) {
-          messageDiv.innerHTML = '<div class="alert alert-success">Results loaded successfully!</div>';
           data.results.forEach((chunkStr) => {
             chunkStr = extractJSON(chunkStr).trim();
             let parsed;
@@ -205,20 +193,17 @@
             chunkData.push(arr);
           });
           showChunk(0);
-          paginationDiv.style.display = chunkData.length > 1 ? "block" : "none";
-          downloadBtn.style.display = "block";
           pageIndicator.textContent = `Page 1 of ${chunkData.length}`;
         } else {
           messageDiv.innerHTML = '<div class="alert alert-warning">No relevant data found.</div>';
         }
       } catch (error) {
-        clearTimeout(progressTimeout);
         messageDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
         console.error("Error:", error);
       }
     });
 
-    // Pagination controls
+    // Pagination controls.
     document.getElementById("prevBtn").addEventListener("click", function () {
       if (currentPage > 0) {
         showChunk(currentPage - 1);
@@ -345,3 +330,4 @@
   </script>
 </body>
 </html>
+
